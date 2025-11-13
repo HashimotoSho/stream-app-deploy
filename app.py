@@ -1,66 +1,60 @@
-import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 from dotenv import load_dotenv
-
-# ---- 環境変数読み込み ----
-load_dotenv()  # .env の OPENAI_API_KEY を読み込む
-
-# ---- LangChain ----
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import StrOutputParser
 
-# ====== 画面 ======
-st.set_page_config(page_title="Streamlit LLM App", page_icon="💬")
-st.title("💬 LLMアプリ")
-st.write("テキストを入力し、専門家の役割を選んで回答を生成します。")
-
-role = st.radio(
-    "専門家を選択：",
-    ["キャリアコーチ", "栄養士"],
-    horizontal=True,
+# ====== アプリ基本設定 ======
+st.set_page_config(
+    page_title="LangChain × Streamlit デモ",
+    page_icon="📚",
+    layout="centered"
 )
 
-user_text = st.text_area("質問・相談内容", height=140, placeholder="例）転職で悩んでいます。")
+st.title("📚 LangChain × Streamlit デモ")
+st.markdown("""
+このアプリでは、入力した質問に対して、選択した専門家の視点で回答を生成します。
 
-# ====== 役割ごとのシステムメッセージ ======
-SYSTEM_MESSAGES = {
-    "キャリアコーチ": "あなたは経験豊富なキャリアコーチです。事実に基づき、実行可能な次の一歩を具体的に提示してください。箇条書きを交え、過度に断定せず丁寧に助言してください。",
-    "栄養士": "あなたは管理栄養士です。栄養学の基本原則に基づき、健康的で現実的な提案を行います。注意点・代替案も簡潔に示してください。医療行為の助言は避けます。",
-}
+1. 質問を入力  
+2. 専門家を選択  
+3. 「送信」をクリック
+""")
 
-# ====== LLMへの問い合わせを行う関数 ======
-def ask_llm(text: str, role_name: str) -> str:
-    system_msg = SYSTEM_MESSAGES.get(role_name, "")
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_msg),
-            ("user", "{question}"),
-        ]
-    )
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
-    chain = prompt | llm | StrOutputParser()
-    return chain.invoke({"question": text})
+# ====== 専門家選択 ======
+expert_choice = st.radio(
+    "専門家を選択してください",
+    ("健康アドバイザー", "料理コンサルタント")
+)
 
-# ====== 実行 ======
-if st.button("回答を生成"):
-    if not user_text.strip():
-        st.warning("テキストを入力してください。")
+# ====== ユーザー入力 ======
+user_input = st.text_input("質問を入力してください:")
+
+# ====== LLM呼び出し関数 ======
+def get_llm_response(user_question: str, expert: str) -> str:
+    """入力と専門家選択をもとにLLMから回答を取得"""
+    if expert == "健康アドバイザー":
+        system_prompt = "あなたは健康に関するアドバイザーです。安全で実用的なアドバイスを提供してください。"
     else:
-        with st.spinner("LLMに問い合わせ中..."):
-            try:
-                answer = ask_llm(user_text, role)
-                st.success("回答")
-                st.write(answer)
-            except Exception as e:
-                st.error(f"エラーが発生しました: {e}")
+        system_prompt = "あなたは料理に関する専門家です。レシピや調理法をわかりやすく説明してください。"
 
-# 使い方の明示
-with st.expander("このアプリについて / 使い方"):
-    st.markdown(
-        """
-- 入力欄に質問・相談内容を記入  
-- 「専門家」を選び **回答を生成** をクリック  
-- 役割に応じてシステムメッセージを切り替え、LangChain経由でOpenAIに問い合わせます  
-        """
-    )
+    # ChatOpenAIインスタンスを作成
+    client = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
+
+    # invoke() で実行
+    response = client.invoke([
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_question}
+    ])
+
+    return response.content  # ←ここでtextを返す
+
+# ====== 送信ボタン ======
+if st.button("送信"):
+    if not user_input.strip():
+        st.warning("質問を入力してください。")
+    else:
+        with st.spinner("回答を生成中…"):
+            answer = get_llm_response(user_input, expert_choice)
+        st.success("💬 回答:")
+        st.write(answer)
